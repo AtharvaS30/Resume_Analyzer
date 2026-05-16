@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ATS Resume Matcher</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:       #111214;
+  --surface:  #1a1d21;
+  --surface2: #22262b;
+  --border:   #2e3338;
+  --border2:  #3a4048;
+  --text:     #d4d8de;
+  --muted:    #6b7280;
+  --dim:      #4b5563;
+  --accent:   #4f8ef7;
+  --green:    #3fb950;
+  --yellow:   #d29922;
+  --red:      #f85149;
+  --purple:   #a78bfa;
+  --mono:     'JetBrains Mono', monospace;
+  --sans:     'IBM Plex Sans', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* Layout */
+.layout { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
+
+/* Sidebar */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 28px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand-icon {
+  width: 32px; height: 32px;
+  background: var(--accent);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+
+.brand-tag {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+/* Upload area */
+.upload-zone {
+  border: 1px dashed var(--border2);
+  border-radius: 8px;
+  padding: 5px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(79,142,247,0.04); }
+.upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.upload-icon { font-size: 28px; margin-bottom: 8px; }
+.upload-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+.upload-sub { font-size: 11px; color: var(--muted); }
+.file-types { display: flex; justify-content: center; gap: 4px; margin-top: 10px; }
+.ft { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 3px;
+      background: var(--surface2); border: 1px solid var(--border); color: var(--dim); }
+
+.file-chip {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  background: rgba(79,142,247,0.08);
+  border: 1px solid rgba(79,142,247,0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.file-chip.show { display: flex; }
+.file-chip-name { font-family: var(--mono); color: var(--accent); font-size: 11px; word-break: break-all; }
+.file-chip-size { color: var(--muted); font-size: 11px; margin-left: auto; white-space: nowrap; }
+
+/* JD textarea */
+.field-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jd-area {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 5px 5px;
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.5;
+  transition: border-color 0.2s;
+}
+.jd-area:focus { outline: none; border-color: var(--accent); }
+.jd-area::placeholder { color: var(--dim); }
+
+.jd-hint { font-size: 11px; color: var(--dim); margin-top: 5px; }
+
+/* Run button */
+.run-btn {
+  width: 100%;
+  padding: 11px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.3px;
+}
+.run-btn:hover:not(:disabled) { background: #6ba3f9; }
+.run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.sidebar-footer {
+  margin-top: auto;
+  font-size: 11px;
+  color: var(--dim);
+  font-family: var(--mono);
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* Main panel */
+.main {
+  padding: 32px 36px;
+  overflow-y: auto;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 60vh;
+  gap: 16px;
+  color: var(--muted);
+  text-align: center;
+}
+.empty-icon { font-size: 48px; opacity: 0.4; }
+.empty-title { font-family: var(--mono); font-size: 16px; color: var(--dim); }
+.empty-sub { font-size: 13px; max-width: 340px; line-height: 1.7; }
+
+/* Loading */
+.loading-state { display: none; flex-direction: column; align-items: center; justify-content: center;
+                 height: 100%; min-height: 60vh; gap: 20px; }
+.loading-state.show { display: flex; }
+.loader {
+  width: 40px; height: 40px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-msg { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.loading-step { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+
+/* Results */
+.results-state { display: none; }
+.results-state.show { display: block; animation: fade 0.3s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Section heading */
+.sec-head {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Score row */
+.score-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.score-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 16px;
+  text-align: center;
+}
+.score-card-label { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+.score-card-value { font-family: var(--mono); font-size: 36px; font-weight: 600; line-height: 1; }
+.score-card-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+/* Breakdown bars */
+.breakdown { margin-bottom: 28px; }
+.breakdown-item { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.breakdown-name { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 90px; flex-shrink: 0; }
+.breakdown-bar-wrap { flex: 1; background: var(--surface2); border-radius: 2px; height: 5px; }
+.breakdown-bar { height: 5px; border-radius: 2px; background: var(--accent); width: 0; transition: width 1s cubic-bezier(0.4,0,0.2,1); }
+.breakdown-pts { font-family: var(--mono); font-size: 11px; color: var(--dim); width: 48px; text-align: right; flex-shrink: 0; }
+
+/* Skills grid */
+.skills-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+.skills-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.skills-box-title { font-family: var(--mono); font-size: 11px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.tag-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 3px;
+  border: 1px solid;
+}
+.tag-green  { color: var(--green);  border-color: rgba(63,185,80,0.3);  background: rgba(63,185,80,0.06); }
+.tag-red    { color: var(--red);    border-color: rgba(248,81,73,0.3);   background: rgba(248,81,73,0.06); }
+.tag-yellow { color: var(--yellow); border-color: rgba(210,153,34,0.3); background: rgba(210,153,34,0.06); }
+.tag-blue   { color: var(--accent); border-color: rgba(79,142,247,0.3); background: rgba(79,142,247,0.06); }
+.tag-empty  { color: var(--dim); font-size: 11px; font-style: italic; }
+
+/* Feedback */
+.feedback { margin-bottom: 28px; }
+.fc {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border-left: 3px solid;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.fc-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+.fc-title { font-weight: 600; margin-bottom: 2px; font-size: 13px; }
+.fc-body  { color: var(--muted); font-size: 12px; }
+.fc.success { background: rgba(63,185,80,0.05);  border-color: var(--green);  }
+.fc.warning { background: rgba(210,153,34,0.05); border-color: var(--yellow); }
+.fc.error   { background: rgba(248,81,73,0.06);  border-color: var(--red);    }
+.fc.info    { background: rgba(79,142,247,0.05); border-color: var(--accent); }
+
+/* Sections found */
+.sections-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 28px; }
+.sec-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 1px solid;
+}
+.sec-chip.found  { color: var(--green);  border-color: rgba(63,185,80,0.3);  background: rgba(63,185,80,0.06); }
+.sec-chip.missing{ color: var(--red);    border-color: rgba(248,81,73,0.3);   background: rgba(248,81,73,0.06); }
+
+/* Error */
+.err-bar {
+  display: none;
+  background: rgba(248,81,73,0.08);
+  border: 1px solid rgba(248,81,73,0.25);
+  color: var(--red);
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-top: 10px;
+}
+.err-bar.show { display: block; }
+
+/* Reset */
+.reset-btn {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--border);
+  padding: 7px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-bottom: 24px;
+  transition: all 0.15s;
+}
+.reset-btn:hover { border-color: var(--border2); color: var(--text); }
+
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { height: auto; position: static; }
+  .score-row { grid-template-columns: 1fr 1fr; }
+  .skills-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div>
+        <div class="brand-name">Resume Analyzer</div>
+        <div class="brand-tag">ATS Checker</div>
+      </div>
+    </div>
+
+    <!-- Resume upload -->
+    <div>
+      <div class="field-label">📄 Resume</div>
+      <div class="upload-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".pdf,.docx,.txt"/>
+        <div class="upload-icon">☁</div>
+        <div class="upload-title">Drop file or click to browse</div>
+        <div class="upload-sub">PDF, DOCX, or TXT</div>
+      </div>
+      <div class="file-chip" id="fileChip">
+        <span>📄</span>
+        <span class="file-chip-name" id="fileName">—</span>
+        <span class="file-chip-size" id="fileSize">—</span>
+      </div>
+    </div>
+
+    <!-- JD input -->
+    <div>
+      <div class="field-label">
+        🔍 Job Description
+        <span style="font-size:10px;color:var(--dim);text-transform:none;letter-spacing:0">(optional)</span>
+      </div>
+      <textarea class="jd-area" id="jdInput"
+        placeholder="Paste the job description here to get match score, missing keywords, and skill gap analysis..."></textarea>
+      <div class="jd-hint"></div>
+    </div>
+
+    <div class="err-bar" id="errBar"></div>
+
+    <button class="run-btn" id="runBtn" disabled onclick="runAnalysis()">
+      ▶ Run Analysis
+    </button>
+
+    <div class="sidebar-footer">
+      
+    </div>
+  </aside>
+
+  <!-- Main Panel -->
+  <main class="main" id="mainPanel">
+
+    <!-- Empty state -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">📝</div>
+      <div class="empty-title">No resume analyzed yet</div>
+      <div class="empty-sub">Upload your resume on the left. Optionally paste a job description scoring.</div>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading-state" id="loadingState">
+      <div class="loader"></div>
+      <div class="loading-msg">Running analysis...</div>
+      <div class="loading-step" id="loadingStep">Extracting text</div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-state" id="resultsState">
+      <button class="reset-btn" onclick="reset()">← New Analysis</button>
+
+      <!-- Score cards -->
+      <div class="sec-head">Score Summary</div>
+      <div class="score-row" id="scoreRow">
+        <div class="score-card">
+          <div class="score-card-label">ATS Score</div>
+          <div class="score-card-value" id="valAts">—</div>
+          <div class="score-card-sub">out of 100</div>
+        </div>
+        <div class="score-card" id="jdCard">
+          <div class="score-card-label">JD Match</div>
+          <div class="score-card-value" id="valJd">—</div>
+          <div class="score-card-sub">TF-IDF similarity</div>
+        </div>
+        <div class="score-card">
+          <div class="score-card-label">Word Count</div>
+          <div class="score-card-value" id="valWords" style="font-size:28px">—</div>
+          <div class="score-card-sub">resume words</div>
+        </div>
+      </div>
+
+      <!-- Breakdown -->
+      <div class="breakdown">
+        <div class="sec-head">Score Breakdown</div>
+        <div id="breakdownList"></div>
+      </div>
+
+      <!-- Sections -->
+      <div class="sec-head">Sections Detected</div>
+      <div class="sections-row" id="sectionsList"></div>
+
+      <!-- Skills (only if JD provided) -->
+      <div id="skillsBlock" style="display:none">
+        <div class="sec-head">Skill Analysis</div>
+        <div class="skills-row">
+          <div class="skills-box">
+            <div class="skills-box-title" style="color:var(--green)">✓ Matching Skills</div>
+            <div class="tag-wrap" id="matchingSkills"></div>
+          </div>
+          <div class="skills-box">
+            <div class="skills-box-title" style="color:var(--red)">✗ Missing from Resume</div>
+            <div class="tag-wrap" id="missingSkills"></div>
+          </div>
+        </div>
+
+        <div class="sec-head">Missing Keywords from JD</div>
+        <div class="skills-box" style="margin-bottom:28px">
+          <div class="tag-wrap" id="missingKeywords"></div>
+        </div>
+      </div>
+
+      <!-- Feedback -->
+      <div class="feedback">
+        <div class="sec-head">Detailed Feedback</div>
+        <div id="feedbackList"></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+const ALL_SECTIONS = ['contact','education','experience','skills','projects','achievements'];
+const ICONS = { success:'✓', warning:'⚠', error:'✗', info:'→' };
+
+let selectedFile = null;
+
+// File handling
+const fileInput = document.getElementById('fileInput');
+const dropZone  = document.getElementById('dropZone');
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+
+function handleFile(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['pdf','docx','txt'].includes(ext)) { showErr('Only PDF, DOCX, TXT supported.'); return; }
+  selectedFile = file;
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileSize').textContent  = (file.size/1024).toFixed(1)+' KB';
+  document.getElementById('fileChip').classList.add('show');
+  document.getElementById('runBtn').disabled = false;
+  hideErr();
+}
+
+function showErr(msg) {
+  const el = document.getElementById('errBar');
+  el.textContent = msg; el.classList.add('show');
+}
+function hideErr() { document.getElementById('errBar').classList.remove('show'); }
+
+// Loading steps
+const STEPS = ['Extracting text...','Cleaning & tokenizing...','Computing TF-IDF vectors...','Calculating cosine similarity...','Building report...'];
+let stepIdx = 0, stepTimer = null;
+function startSteps() {
+  stepIdx = 0;
+  document.getElementById('loadingStep').textContent = STEPS[0];
+  stepTimer = setInterval(() => {
+    stepIdx = (stepIdx+1) % STEPS.length;
+    document.getElementById('loadingStep').textContent = STEPS[stepIdx];
+  }, 800);
+}
+function stopSteps() { clearInterval(stepTimer); }
+
+async function runAnalysis() {
+  if (!selectedFile) return;
+  show('loading');
+  startSteps();
+
+  const fd = new FormData();
+  fd.append('resume', selectedFile);
+  fd.append('jd_text', document.getElementById('jdInput').value.trim());
+
+  try {
+    const res  = await fetch('/analyze', { method:'POST', body:fd });
+    const data = await res.json();
+    stopSteps();
+    if (data.error) { show('empty'); showErr(data.error); return; }
+    renderResults(data);
+    show('results');
+  } catch(e) {
+    stopSteps();
+    show('empty');
+    showErr('Request failed. Is the server running?');
+  }
+}
+
+function show(state) {
+  document.getElementById('emptyState').style.display   = state === 'empty'   ? 'flex'  : 'none';
+  document.getElementById('loadingState').classList.toggle('show', state === 'loading');
+  document.getElementById('resultsState').classList.toggle('show', state === 'results');
+}
+
+function scoreColor(n) {
+  if (n >= 70) return 'var(--green)';
+  if (n >= 45) return 'var(--yellow)';
+  return 'var(--red)';
+}
+
+function renderResults(d) {
+  // Score cards
+  const ats = d.score;
+  document.getElementById('valAts').textContent   = ats;
+  document.getElementById('valAts').style.color   = scoreColor(ats);
+  document.getElementById('valWords').textContent = d.word_count;
+
+  const jdCard = document.getElementById('jdCard');
+  if (d.has_jd) {
+    document.getElementById('valJd').textContent = d.similarity_pct + '%';
+    document.getElementById('valJd').style.color = scoreColor(d.similarity_pct);
+    jdCard.style.display = '';
+  } else {
+    jdCard.style.display = 'none';
+  }
+
+  // Breakdown
+  const bl = document.getElementById('breakdownList');
+  bl.innerHTML = '';
+  Object.entries(d.breakdown).forEach(([name, val]) => {
+    if (!d.has_jd && name === 'JD Match') return;
+    const pct = Math.round(val.score / val.max * 100);
+    bl.innerHTML += `
+      <div class="breakdown-item">
+        <span class="breakdown-name">${name}</span>
+        <div class="breakdown-bar-wrap">
+          <div class="breakdown-bar" style="width:${pct}%;background:${scoreColor(pct)}"></div>
+        </div>
+        <span class="breakdown-pts">${val.score}/${val.max}</span>
+      </div>`;
+  });
+
+  // Sections
+  const sl = document.getElementById('sectionsList');
+  sl.innerHTML = '';
+  ALL_SECTIONS.forEach(s => {
+    const found = d.sections_found.includes(s);
+    sl.innerHTML += `<span class="sec-chip ${found?'found':'missing'}">${found?'✓':'✗'} ${s}</span>`;
+  });
+
+  // Skills block
+  const skillsBlock = document.getElementById('skillsBlock');
+  if (d.has_jd) {
+    skillsBlock.style.display = '';
+    const ms = document.getElementById('matchingSkills');
+    const mi = document.getElementById('missingSkills');
+    const mk = document.getElementById('missingKeywords');
+    ms.innerHTML = d.matching_skills.length
+      ? d.matching_skills.map(s=>`<span class="tag tag-green">${s}</span>`).join('')
+      : '<span class="tag-empty">No matching skills found</span>';
+    mi.innerHTML = d.missing_skills.length
+      ? d.missing_skills.map(s=>`<span class="tag tag-red">${s}</span>`).join('')
+      : '<span class="tag-empty">No missing skills — great!</span>';
+    mk.innerHTML = d.missing_keywords.length
+      ? d.missing_keywords.map(k=>`<span class="tag tag-yellow">${k}</span>`).join('')
+      : '<span class="tag-empty">No missing keywords detected</span>';
+  } else {
+    skillsBlock.style.display = 'none';
+  }
+
+  // Feedback
+  const fl = document.getElementById('feedbackList');
+  fl.innerHTML = '';
+  d.feedback.forEach(f => {
+    fl.innerHTML += `
+      <div class="fc ${f.type}">
+        <span class="fc-icon">${ICONS[f.type]}</span>
+        <div>
+          <div class="fc-title">${f.title}</div>
+          <div class="fc-body">${f.body}</div>
+        </div>
+      </div>`;
+  });
+}
+
+function reset() {
+  selectedFile = null;
+  fileInput.value = '';
+  document.getElementById('fileChip').classList.remove('show');
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('jdInput').value  = '';
+  hideErr();
+  show('empty');
+}
+</script>
+</body>
+</html>
